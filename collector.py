@@ -138,6 +138,13 @@ def run_once(cfg, path, log=print):
         con.execute("DELETE FROM snapshots WHERE ts < ?", (ts - 180 * 86400,))
         con.commit()
 
+        state["progress"] = "лайки"
+        for uid, (up, down) in api.votes([int(g["id"]) for g in good]).items():
+            con.execute("UPDATE games SET up_votes=?, down_votes=? WHERE universe_id=?", (up, down, uid))
+        for g in good:
+            con.execute("UPDATE games SET genre=? WHERE universe_id=?", (g.get("genre"), int(g["id"])))
+        con.commit()
+
         missing_icons = [r[0] for r in con.execute("SELECT universe_id FROM games WHERE icon_url IS NULL")]
         if missing_icons:
             state["progress"] = "иконки"

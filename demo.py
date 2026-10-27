@@ -115,8 +115,13 @@ def build(root, days=35):
                        created, visits, playing, favorites, first_seen, last_seen, first_seen_top,
                        last_seen_top, is_manual, sorts) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (uid, place, cur_name, cur_desc, f"Demo Studio {i % 6 + 1}", updated,
-                     "2024-01-01T00:00:00Z", base * 9000, rows[-1][2], base * 40, first_seen, now,
+                     time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(
+                         first_seen - (rnd.randint(3, 20) if kind == "new" else rnd.randint(60, 1500)) * DAY)),
+                     base * 9000, rows[-1][2], base * 40, first_seen, now,
                      first_seen, now, 1 if i in (5, 13) else 0, "Demo"))
+        up = base * rnd.randint(20, 60)
+        con.execute("UPDATE games SET up_votes=?, down_votes=? WHERE universe_id=?",
+                    (up, int(up * rnd.uniform(0.05, 0.4)), uid))
     con.commit()
     con.close()
     return path

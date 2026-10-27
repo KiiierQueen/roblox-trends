@@ -140,6 +140,20 @@ class RobloxAPI:
             out.extend(data.get("data") or [])
         return out
 
+    def votes(self, universe_ids):
+        out = {}
+        ids = list(universe_ids)
+        for i in range(0, len(ids), 100):
+            chunk = ids[i:i + 100]
+            try:
+                data = self.get(self.url("games", "/v1/games/votes", universeIds=",".join(map(str, chunk))))
+            except Exception as e:
+                self.log(f"  лайки: {e}")
+                continue
+            for d in data.get("data") or []:
+                out[int(d["id"])] = (d.get("upVotes") or 0, d.get("downVotes") or 0)
+        return out
+
     def place_to_universe(self, place_id):
         data = self.get(self.url("apis", f"/universes/v1/places/{int(place_id)}/universe"))
         return data.get("universeId")

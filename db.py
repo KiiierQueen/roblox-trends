@@ -69,6 +69,10 @@ def connect(path):
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("PRAGMA synchronous=NORMAL")
     con.executescript(SCHEMA)
+    cols = {r[1] for r in con.execute("PRAGMA table_info(games)")}
+    for col, typ in (("up_votes", "INTEGER"), ("down_votes", "INTEGER"), ("genre", "TEXT")):
+        if col not in cols:
+            con.execute(f"ALTER TABLE games ADD COLUMN {col} {typ}")
     return con
 
 

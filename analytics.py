@@ -27,6 +27,29 @@ def growth(points, now, days):
             "from": round(past), "to": round(recent)}
 
 
+def growth_1d(points, now):
+    """Сутки к суткам: последние 3 часа против тех же 3 часов вчера."""
+    recent = _avg(points, now - 3 * 3600, now)
+    past = _avg(points, now - DAY - 3 * 3600, now - DAY + 1800)
+    if recent is None or past is None:
+        return None
+    if past <= 0:
+        return {"ratio": None, "pct": None, "from": 0, "to": round(recent)}
+    ratio = recent / past
+    return {"ratio": round(ratio, 3), "pct": round((ratio - 1) * 100, 1),
+            "from": round(past), "to": round(recent)}
+
+
+def _iso_ts(s):
+    from datetime import datetime, timezone
+    if not s:
+        return None
+    try:
+        return int(datetime.strptime(s[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc).timestamp())
+    except ValueError:
+        return None
+
+
 def _now(con):
     row = con.execute("SELECT MAX(ts) FROM snapshots").fetchone()
     return row[0]
@@ -74,9 +97,12 @@ def games_table(con, new_days=14):
                 cnts[27 - d] += 1
         spark = [round(s / c) if c else None for s, c in zip(sums, cnts)]
         span_days = (now - pts[0][0]) / DAY
+        g1 = growth_1d(pts, now)
         g7, g14, g28 = growth(pts, now, 7), growth(pts, now, 14), growth(pts, now, 28)
+        created_ts = _iso_ts(g["created"])
+        up, down = g["up_votes"] or 0, g["down_votes"] or 0
         # «Лучший доступный» рост для трендов, пока история короткая.
-        best = g14 or g7
+        best = g14 or g7 or g1
         if best is None and span_days >= 2:
             first_avg = _avg(pts, pts[0][0], pts[0][0] + DAY / 2)
             recent = _avg(pts, now - DAY / 2, now)
@@ -92,7 +118,10 @@ def games_table(con, new_days=14):
             "icon": g["icon_url"], "online": pts[-1][1], "online_ts": pts[-1][0],
             "visits": g["visits"], "favorites": g["favorites"],
             "updated": g["updated"], "created": g["created"],
-            "g7": g7, "g14": g14, "g28": g28, "best": best,
+            "g1": g1, "g7": g7, "g14": g14, "g28": g28, "best": best,
+            "age_days": round((now - created_ts) / DAY) if created_ts else None,
+            "rating": round(up / (up + down) * 100) if up + down >= 20 else None,
+            "votes": up + down, "genre": g["genre"],
             "first_seen_top": fst, "is_new": is_new, "is_manual": bool(g["is_manual"]),
             "in_top_now": g["last_seen_top"] == now, "sorts": g["sorts"],
             "text_updates_28d": lt[1] if lt else 0, "last_text_update": lt[0] if lt else None,

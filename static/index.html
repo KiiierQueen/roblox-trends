@@ -100,6 +100,11 @@ tbody tr:hover { background: var(--surface-2); }
 .g.down .p { color: var(--down-text); }
 .g.na { color: var(--muted); }
 .spark { display: block; }
+#tbody.with-desc tr:not(.drow) td { border-bottom: 0; padding-bottom: 2px; }
+tr.drow td { padding-top: 0; white-space: normal; }
+.dtext { color: var(--text-2); font-size: 12px; line-height: 1.4; max-width: 900px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+tbody tr.drow:hover, tbody tr:hover + tr.drow { background: var(--surface-2); }
 .empty { padding: 40px; text-align: center; color: var(--text-2); }
 
 /* modal */
@@ -161,12 +166,11 @@ del { background: var(--del-bg); color: var(--text-2); border-radius: 3px; }
   h1 { font-size: 18px; }
   header .stat { order: 3; width: 100%; font-size: 12px; }
   header .spacer { display: none; }
-  /* на телефоне: игра, онлайн, рост 7 и 14 дней */
-  #thead th:nth-child(3), #tbody td:nth-child(3),
-  #thead th:nth-child(6), #tbody td:nth-child(6),
-  #thead th:nth-child(7), #tbody td:nth-child(7),
-  #thead th:nth-child(8), #tbody td:nth-child(8),
-  #thead th:nth-child(9), #tbody td:nth-child(9) { display: none; }
+  /* на телефоне: игра, онлайн, рост за 24 ч и 14 дней */
+  #thead th:nth-child(3), #tbody tr:not(.drow) td:nth-child(3),
+  #thead th:nth-child(5), #tbody tr:not(.drow) td:nth-child(5),
+  #thead th:nth-child(n+7), #tbody tr:not(.drow) td:nth-child(n+7) { display: none; }
+  .dtext { -webkit-line-clamp: 3; }
   th, td { padding: 7px 4px; }
   th { white-space: normal; font-size: 11px; line-height: 1.2; }
   td:first-child, th:first-child { padding-left: 8px; }
@@ -214,10 +218,12 @@ del { background: var(--del-bg); color: var(--text-2); border-radius: 3px; }
       <input type="search" id="search" placeholder="Поиск по названию и описанию…">
       <div class="chips" id="filters">
         <button class="chip active" data-f="all">Все</button>
+        <button class="chip" data-f="young" title="Игры, созданные не больше 60 дней назад">Молодые игры</button>
         <button class="chip" data-f="new">Новые в топе</button>
         <button class="chip" data-f="updated">С обновлением за 14 дн.</button>
         <button class="chip" data-f="manual">Мои</button>
       </div>
+      <button class="chip" id="descToggle" title="Показывать описание под названием">Описание</button>
       <select id="minOnline" title="Минимальный онлайн">
         <option value="0">Онлайн: любой</option>
         <option value="100">от 100</option>
@@ -362,17 +368,30 @@ const COLS = [
   {k:"name", t:"Игра"},
   {k:"online", t:"Онлайн сейчас", num:1},
   {k:"spark", t:"28 дней", nosort:1},
+  {k:"g1", t:"Рост 24 ч", num:1},
   {k:"g7", t:"Рост 7 дн.", num:1},
   {k:"g14", t:"Рост 14 дн.", num:1},
   {k:"g28", t:"Рост 28 дн.", num:1},
+  {k:"age_days", t:"Создана", num:1, asc:1},
+  {k:"rating", t:"Лайки", num:1},
   {k:"visits", t:"Визиты", num:1},
   {k:"updated", t:"Обновлена", num:1},
   {k:"first_seen_top", t:"В топе с", num:1},
 ];
 
+function ageTxt(d) {
+  if (d == null) return "—";
+  if (d < 1) return "сегодня";
+  if (d < 60) return d + " дн.";
+  if (d < 730) return Math.round(d / 30) + " мес.";
+  return (d / 365).toFixed(d < 3650 ? 1 : 0).replace(".0", "") + " г.";
+}
+const cleanDesc = t => (t || "").replace(/\s*\n+\s*/g, " · ").replace(/\s{2,}/g, " ").trim();
+let showDesc = (() => { try { return localStorage.getItem("rtt_desc") !== "0"; } catch (e) { return true; } })();
+
 function sortVal(g, k) {
   if (k === "name") return (g.name||"").toLowerCase();
-  if (k[0] === "g" && /^g\d+$/.test(k)) return g[k]?.ratio ?? (g[k] ? 1e9 : null);
+  if (/^g\d+$/.test(k)) return g[k]?.ratio ?? (g[k] ? 1e9 : null);
   if (k === "updated") return isoTs(g.updated);
   return g[k];
 }
@@ -412,7 +431,7 @@ function renderHead() {
   $("#thead").innerHTML = COLS.map(c => `<th class="${c.num ? "num" : ""}" data-k="${c.k}">${c.t}${sortKey === c.k ? ` <span class="arr">${sortDir < 0 ? "▼" : "▲"}</span>` : ""}</th>`).join("");
   document.querySelectorAll("#thead th").forEach(th => th.onclick = () => {
     const k = th.dataset.k; if (COLS.find(c => c.k === k).nosort) return;
-    if (sortKey === k) sortDir = -sortDir; else { sortKey = k; sortDir = k === "name" ? 1 : -1; }
+    if (sortKey === k) sortDir = -sortDir; else { sortKey = k; sortDir = (k === "name" || COLS.find(c => c.k === k).asc) ? 1 : -1; }
     renderTable();
   });
 }
@@ -423,6 +442,7 @@ function filtered() {
   return GAMES.filter(g => {
     if (g.online < min) return false;
     if (filter === "new" && !g.is_new) return false;
+    if (filter === "young" && !(g.age_days != null && g.age_days <= 60)) return false;
     if (filter === "manual" && !g.is_manual) return false;
     if (filter === "updated" && !(g.last_text_update && STATUS.now - g.last_text_update < 14*86400)) return false;
     if (q && !((g.name||"").toLowerCase().includes(q) || (g.desc||"").toLowerCase().includes(q))) return false;
@@ -442,12 +462,17 @@ function renderTable() {
     <td>${gameCell(g)}</td>
     <td class="num"><b>${fmt(g.online)}</b></td>
     <td>${spark(g.spark)}</td>
+    <td class="num">${growthCell(g.g1)}</td>
     <td class="num">${growthCell(g.g7)}</td>
     <td class="num">${growthCell(g.g14)}</td>
     <td class="num">${growthCell(g.g28)}</td>
+    <td class="num" title="${esc(g.created || "")}">${g.age_days != null && g.age_days <= 60 ? `<b style="color:var(--accent)">${ageTxt(g.age_days)}</b>` : ageTxt(g.age_days)}</td>
+    <td class="num" title="${g.votes ? fmtFull(g.votes) + " голосов" : ""}">${g.rating != null ? g.rating + "%" : "—"}</td>
     <td class="num">${fmt(g.visits)}</td>
     <td class="num" title="${esc(g.updated)}">${ago(isoTs(g.updated))}</td>
-    <td class="num">${g.first_seen_top ? dDate(g.first_seen_top) : "—"}</td></tr>`).join("");
+    <td class="num">${g.first_seen_top ? dDate(g.first_seen_top) : "—"}</td></tr>
+    ${showDesc && g.desc ? `<tr class="drow" data-id="${g.id}"><td colspan="${COLS.length}"><div class="dtext">${esc(cleanDesc(g.desc))}</div></td></tr>` : ""}`).join("");
+  $("#tbody").classList.toggle("with-desc", showDesc);
   const empty = $("#empty");
   empty.hidden = rows.length > 0;
   if (!rows.length) empty.textContent = GAMES.length ? "Ничего не найдено по фильтрам." : "Данных пока нет. Нажмите «Собрать сейчас» и подождите пару минут.";
@@ -504,12 +529,19 @@ async function openGame(id) {
   m.innerHTML = `
     <button class="close" aria-label="Закрыть">×</button>
     <div class="mhead">${g.icon_url ? `<img src="${esc(g.icon_url)}" alt="">` : ""}
-      <div><h2>${esc(g.name)}</h2><div class="stat">${esc(g.creator || "")}${link ? ` · <a href="${link}" target="_blank" rel="noopener">открыть в Roblox ↗</a>` : ""}</div></div></div>
+      <div><h2>${esc(g.name)}</h2><div class="stat">${esc(g.creator || "")}${link ? ` · <a href="${link}" target="_blank" rel="noopener">открыть в Roblox ↗</a>` : ""}${g.root_place_id ? ` · <a href="https://romonitorstats.com/experience/${g.root_place_id}/" target="_blank" rel="noopener" title="Графики онлайна за прошлые месяцы">история онлайна на RoMonitor ↗</a>` : ""}</div></div></div>
+    ${g.description ? `<div style="padding:12px 14px;margin:6px 0 4px;background:var(--surface-2);border-radius:10px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">О ЧЁМ ИГРА · <a href="https://translate.google.com/?sl=auto&tl=ru&op=translate&text=${encodeURIComponent(g.description.slice(0, 1800))}" target="_blank" rel="noopener">перевести ↗</a></div>
+      <div class="diff" id="descFull" style="max-height:7.5em;overflow:hidden">${esc(g.description)}</div>
+      ${g.description.length > 280 ? `<a href="#" id="descMore" style="font-size:13px">показать полностью</a>` : ""}</div>` : ""}
     <div class="kpis">
       <div class="kpi"><div class="l">Онлайн сейчас</div><div class="v">${fmtFull(row.online ?? g.playing)}</div></div>
+      <div class="kpi"><div class="l">Рост 24 ч</div><div class="v">${growthCell(row.g1)}</div></div>
       <div class="kpi"><div class="l">Рост 7 дн.</div><div class="v">${growthCell(row.g7)}</div></div>
       <div class="kpi"><div class="l">Рост 14 дн.</div><div class="v">${growthCell(row.g14)}</div></div>
       <div class="kpi"><div class="l">Рост 28 дн.</div><div class="v">${growthCell(row.g28)}</div></div>
+      <div class="kpi"><div class="l">Создана</div><div class="v" style="font-size:15px">${row.age_days != null ? ageTxt(row.age_days) + " назад" : "—"}</div></div>
+      <div class="kpi"><div class="l">Лайки</div><div class="v">${row.rating != null ? row.rating + "%" : "—"}</div></div>
       <div class="kpi"><div class="l">Визиты</div><div class="v">${fmt(g.visits)}</div></div>
       <div class="kpi"><div class="l">Последняя версия</div><div class="v" style="font-size:15px">${ago(isoTs(g.updated))}</div></div>
     </div>
@@ -525,8 +557,10 @@ async function openGame(id) {
       ${textUps.length ? textUps.map(u => updateHtml(u)).join("") : `<p class="hint">Изменений названия и описания пока не замечено.</p>`}
       ${pubUps.length ? `<details><summary class="stat" style="cursor:pointer">Публикации версий без изменения текста: ${pubUps.length}</summary>${pubUps.map(u => updateHtml(u)).join("")}</details>` : ""}
     </div>
-    <details style="margin-top:10px"><summary class="stat" style="cursor:pointer">Текущее описание</summary><div class="diff" style="margin-top:6px">${esc(g.description)}</div></details>`;
+`;
   m.querySelector(".close").onclick = closeModal;
+  const more = m.querySelector("#descMore");
+  if (more) more.onclick = e => { e.preventDefault(); m.querySelector("#descFull").style.maxHeight = "none"; more.remove(); };
   drawChart(d, 28);
   m.querySelectorAll("#range .chip").forEach(b => b.onclick = () => {
     m.querySelectorAll("#range .chip").forEach(x => x.classList.toggle("active", x === b));
@@ -667,6 +701,11 @@ document.querySelectorAll(".tab").forEach(t => t.onclick = () => showTab(t.datas
 function syncFilters() { document.querySelectorAll("#filters .chip").forEach(c => c.classList.toggle("active", c.dataset.f === filter)); }
 document.querySelectorAll("#filters .chip").forEach(c => c.onclick = () => { filter = c.dataset.f; syncFilters(); renderTable(); });
 $("#search").oninput = renderTable;
+$("#descToggle").classList.toggle("active", showDesc);
+$("#descToggle").onclick = () => {
+  showDesc = !showDesc; try { localStorage.setItem("rtt_desc", showDesc ? "1" : "0"); } catch (e) {}
+  $("#descToggle").classList.toggle("active", showDesc); renderTable();
+};
 $("#minOnline").onchange = renderTable;
 $("#feedSearch").oninput = renderFeed;
 document.querySelectorAll("#trendDays .chip").forEach(c => c.onclick = () => {
