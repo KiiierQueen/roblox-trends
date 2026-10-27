@@ -143,8 +143,16 @@ def run_once(cfg, path, log=print):
                         (uid, ts, g.get("playing") or 0, g.get("visits") or 0))
         con.commit()
 
-        con.execute("DELETE FROM snapshots WHERE ts < ?", (ts - 180 * 86400,))
+        # Чтобы база не росла бесконечно:
+        #  - последние 30 дней — замер каждый час;
+        #  - 30–365 дней — каждые 4 часа (для графиков и роста этого хватает);
+        #  - старше года — удаляем; изменения названий/описаний старше года тоже.
+        con.execute("DELETE FROM snapshots WHERE ts < ?", (ts - 365 * 86400,))
+        con.execute("DELETE FROM snapshots WHERE ts < ? AND (ts / 3600) % 4 != 0", (ts - 30 * 86400,))
+        con.execute("DELETE FROM updates WHERE ts < ?", (ts - 365 * 86400,))
         con.commit()
+        if int(time.strftime("%H", time.gmtime(ts))) == 3:  # раз в сутки ужимаем файл
+            con.execute("VACUUM")
 
         state["progress"] = "лайки"
         for uid, (up, down) in api.votes([int(g["id"]) for g in good]).items():

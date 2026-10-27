@@ -36,7 +36,11 @@ jobs:
         run: |
           mkdir -p data
           if git fetch --depth=1 origin data 2>/dev/null; then
-            if git cat-file -e origin/data:tracker.db.enc 2>/dev/null; then
+            if git cat-file -e origin/data:tracker.db.gz.enc 2>/dev/null; then
+              git show origin/data:tracker.db.gz.enc > /tmp/tracker.db.gz.enc
+              python vault.py dec /tmp/tracker.db.gz.enc data/tracker.db.gz
+              gunzip -f data/tracker.db.gz
+            elif git cat-file -e origin/data:tracker.db.enc 2>/dev/null; then
               git show origin/data:tracker.db.enc > /tmp/tracker.db.enc
               python vault.py dec /tmp/tracker.db.enc data/tracker.db
             else
@@ -54,7 +58,8 @@ jobs:
         run: |
           rm -rf /tmp/d && mkdir /tmp/d
           if [ -n "$SITE_PASSWORD" ]; then
-            python vault.py enc data/tracker.db /tmp/d/tracker.db.enc
+            gzip -9 -c data/tracker.db > /tmp/tracker.db.gz
+            python vault.py enc /tmp/tracker.db.gz /tmp/d/tracker.db.gz.enc
           else
             cp data/tracker.db /tmp/d/
           fi
@@ -64,6 +69,7 @@ jobs:
           git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
             commit -qm "data $(date -u +%FT%TZ)"
           git push -qf "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" data
+          echo "база: $(du -h ${GITHUB_WORKSPACE}/data/tracker.db | cut -f1), в GitHub после сжатия: $(du -h /tmp/d/* | cut -f1)"
 
       - name: Собрать сайт
         run: python export_static.py site
