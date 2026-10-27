@@ -151,6 +151,15 @@ del { background: var(--del-bg); color: var(--text-2); border-radius: 3px; }
 .gchip:hover { outline: 1px solid var(--accent); }
 .snip { font-size: 12px; color: var(--text-2); margin-top: 4px; }
 .bar { height: 8px; border-radius: 4px; background: var(--accent); opacity: .8; }
+.mv { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); cursor: pointer; }
+.mv:first-child { border-top: 0; }
+.mv:hover .mvn { color: var(--accent); }
+.mv .rk { font-variant-numeric: tabular-nums; min-width: 92px; font-size: 13px; color: var(--text-2); }
+.mv .rk b { font-size: 15px; }
+.mv .d { font-weight: 700; min-width: 48px; text-align: right; font-variant-numeric: tabular-nums; }
+.mv .d.up { color: var(--up-text); } .mv .d.down { color: var(--down-text); }
+.mv .mvn { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mv .mvs { font-size: 12px; color: var(--text-2); }
 .manual-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
 .manual-list div { display: flex; justify-content: space-between; gap: 8px; font-size: 13px;
   background: var(--surface-2); padding: 4px 8px; border-radius: 6px; word-break: break-all; }
@@ -209,6 +218,7 @@ del { background: var(--del-bg); color: var(--text-2); border-radius: 3px; }
 
   <nav class="tabs">
     <button class="tab active" data-tab="games">Игры</button>
+    <button class="tab" data-tab="moves">Движение в топе</button>
     <button class="tab" data-tab="trends">Тренды</button>
     <button class="tab" data-tab="feed">Лента обновлений</button>
   </nav>
@@ -237,6 +247,39 @@ del { background: var(--del-bg); color: var(--text-2); border-radius: 3px; }
         <tbody id="tbody"></tbody>
       </table>
       <div class="empty" id="empty" hidden></div>
+    </div>
+  </section>
+
+  <section id="tab-moves" hidden>
+    <div class="toolbar">
+      <span class="stat">За последние:</span>
+      <div class="chips" id="moveHours">
+        <button class="chip" data-h="3">3 ч</button>
+        <button class="chip active" data-h="6">6 ч</button>
+        <button class="chip" data-h="12">12 ч</button>
+        <button class="chip" data-h="24">24 ч</button>
+      </div>
+      <select id="moveThr" title="Какой сдвиг считать заметным">
+        <option value="smart">Заметные сдвиги (умный порог)</option>
+        <option value="5">от 5 мест</option>
+        <option value="10">от 10 мест</option>
+        <option value="20">от 20 мест</option>
+        <option value="50">от 50 мест</option>
+      </select>
+      <select id="moveRange">
+        <option value="0">Весь топ</option>
+        <option value="100">Топ-100</option>
+        <option value="50">Топ-50</option>
+      </select>
+    </div>
+    <p class="hint" id="moveNote"></p>
+    <div class="grid2">
+      <div class="card section"><h3>▲ Взлетели</h3><div id="movesUp"></div></div>
+      <div class="card section"><h3>▼ Упали</h3><div id="movesDown"></div></div>
+    </div>
+    <div class="grid2" style="margin-top:14px">
+      <div class="card section"><h3>Ворвались в топ</h3><p class="hint">Не отслеживались в начале периода.</p><div id="movesNew"></div></div>
+      <div class="card section"><h3>Выпали из топа</h3><p class="hint">Были в начале периода, сейчас их нет.</p><div id="movesGone"></div></div>
     </div>
   </section>
 
@@ -309,6 +352,7 @@ function staticPath(path) {
   if (p === "/api/status") return "data/status.json";
   if (p === "/api/games") return "data/games.json";
   if (p === "/api/updates") return "data/updates.json";
+  if (p === "/api/moves") return `data/moves_${u.searchParams.get("hours") || 6}.json`;
   if (p === "/api/trends") return `data/trends_${u.searchParams.get("days") || 14}.json`;
   const m = p.match(/^\/api\/game\/(\d+)$/);
   if (m) return `data/game/${m[1]}.json`;
@@ -675,6 +719,57 @@ async function loadTrends() {
 }
 function plural(n, a, b, c) { n = Math.abs(n) % 100; const n1 = n % 10; return n > 10 && n < 20 ? c : n1 > 1 && n1 < 5 ? b : n1 === 1 ? a : c; }
 
+// ---------- движение в топе ----------
+let MOVES = null, moveHours = 6;
+async function loadMoves() { MOVES = await api("/api/moves?hours=" + moveHours); renderMoves(); }
+function significant(g) {
+  const d = Math.abs(g.delta || 0), thr = $("#moveThr").value;
+  if (thr === "smart") return d >= Math.max(2, Math.ceil(0.2 * Math.max(g.rank, g.rank_then)));
+  return d >= +thr;
+}
+function moveItem(g) {
+  const pct = g.online != null && g.online_then ? ((g.online / g.online_then - 1) * 100) : null;
+  const d = g.delta;
+  const upd = g.updated_ts ? (g.updated_kind === "text"
+    ? `<span class="badge upd" title="Изменили название или описание">обновили текст ${ago(g.updated_ts)}</span>`
+    : `<span class="badge" title="Опубликована новая версия">новая версия ${ago(g.updated_ts)}</span>`) : "";
+  const rk = g.gone ? `<b>#${g.rank_then}</b> → нет` : g.rank_then ? `#${g.rank_then} → <b>#${g.rank}</b>` : `<b>#${g.rank}</b>`;
+  const dd = d ? `<span class="d ${d > 0 ? "up" : "down"}">${d > 0 ? "▲" : "▼"}${Math.abs(d)}</span>` : `<span class="d"></span>`;
+  const on = g.gone ? `было ${fmt(g.online_then)} онлайн` : g.online_then != null
+    ? `${fmt(g.online_then)} → ${fmt(g.online)} онлайн${pct != null ? ` (${pct >= 0 ? "+" : "−"}${Math.abs(pct).toFixed(0)}%)` : ""}`
+    : `${fmt(g.online)} онлайн`;
+  return `<div class="mv" data-open="${g.id}">${dd}<span class="rk">${rk}</span>
+    <div style="min-width:0"><div class="mvn">${esc(g.name)}${upd}</div><div class="mvs">${on}</div></div></div>`;
+}
+function renderMoves() {
+  const m = MOVES;
+  if (!m || !m.then) {
+    $("#moveNote").textContent = `Пока нет замера ${moveHours} ч назад — трекер работает недостаточно долго. Попробуйте период короче.`;
+    ["#movesUp", "#movesDown", "#movesNew", "#movesGone"].forEach(id => $(id).innerHTML = "");
+    return;
+  }
+  const lim = +$("#moveRange").value;
+  const inRange = g => !lim || Math.min(g.rank || 1e9, g.rank_then || 1e9) <= lim;
+  const moved = m.games.filter(g => g.delta && inRange(g) && significant(g));
+  const up = moved.filter(g => g.delta > 0).sort((a, b) => b.delta / Math.max(a.rank_then, 1) - a.delta / Math.max(b.rank_then, 1) || b.delta - a.delta);
+  const down = moved.filter(g => g.delta < 0).sort((a, b) => a.delta / Math.max(a.rank, 1) - b.delta / Math.max(b.rank, 1) || a.delta - b.delta);
+  const fresh = m.games.filter(g => g.new && (!lim || g.rank <= lim)).sort((a, b) => a.rank - b.rank);
+  const gone = m.games.filter(g => g.gone && (!lim || g.rank_then <= lim)).sort((a, b) => a.rank_then - b.rank_then);
+  const empty = t => `<p class="hint" style="margin:6px 0 0">${t}</p>`;
+  $("#movesUp").innerHTML = up.slice(0, 60).map(moveItem).join("") || empty("Заметных взлётов нет.");
+  $("#movesDown").innerHTML = down.slice(0, 60).map(moveItem).join("") || empty("Заметных падений нет.");
+  $("#movesNew").innerHTML = fresh.slice(0, 40).map(moveItem).join("") || empty("Нет.");
+  $("#movesGone").innerHTML = gone.slice(0, 40).map(moveItem).join("") || empty("Нет.");
+  $("#moveNote").textContent = `Сравнение: ${dt(m.then)} → ${dt(m.now)}. Позиция — место по онлайну среди ${m.total} отслеживаемых игр. ` +
+    ($("#moveThr").value === "smart" ? "Умный порог: сдвиг минимум на 20% от позиции и не меньше 2 мест (в топ-10 заметен сдвиг на 2, на 200-м месте — только на 40). " : "") +
+    (moveHours < 24 ? "Внимание: за несколько часов позиции сильно двигает время суток (в одних странах день, в других ночь). Сравнение за 24 ч от этого свободно." : "");
+}
+document.querySelectorAll("#moveHours .chip").forEach(c => c.onclick = () => {
+  moveHours = +c.dataset.h; document.querySelectorAll("#moveHours .chip").forEach(x => x.classList.toggle("active", x === c)); loadMoves();
+});
+$("#moveThr").onchange = renderMoves;
+$("#moveRange").onchange = renderMoves;
+
 // ---------- feed ----------
 let FEED = [];
 async function loadFeed() { FEED = await api("/api/updates?days=28"); renderFeed(); }
@@ -693,7 +788,8 @@ document.addEventListener("click", e => {
 });
 function showTab(name) {
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
-  ["games", "trends", "feed"].forEach(n => $("#tab-" + n).hidden = n !== name);
+  ["games", "moves", "trends", "feed"].forEach(n => $("#tab-" + n).hidden = n !== name);
+  if (name === "moves") loadMoves();
   if (name === "trends") loadTrends();
   if (name === "feed") loadFeed();
 }

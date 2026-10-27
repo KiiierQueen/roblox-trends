@@ -268,3 +268,48 @@ def trends(con, days=14, new_days=14):
                      "icon": g["icon"]} for g in growing[:25]],
         "words": words[:80], "update_words": fresh[:80],
     }
+
+
+# ---------------- Движение в топе ----------------
+def _ranks(con, ts):
+    rows = con.execute("SELECT universe_id, playing FROM snapshots WHERE ts=? ORDER BY playing DESC", (ts,))
+    return {uid: (i + 1, p) for i, (uid, p) in enumerate(rows)}
+
+
+def rank_moves(con, hours=6):
+    """Позиции в топе сейчас и N часов назад (по онлайну среди отслеживаемых игр)."""
+    stamps = [r[0] for r in con.execute("SELECT DISTINCT ts FROM snapshots ORDER BY ts DESC LIMIT 400")]
+    if len(stamps) < 2:
+        return {"hours": hours, "now": stamps[0] if stamps else None, "then": None, "games": []}
+    now = stamps[0]
+    target = now - hours * 3600
+    then = min(stamps[1:], key=lambda t: abs(t - target))
+    if abs(then - target) > max(3600, hours * 3600 * 0.25):
+        return {"hours": hours, "now": now, "then": None, "games": []}
+    r_now, r_then = _ranks(con, now), _ranks(con, then)
+    info = {r[0]: r for r in con.execute("SELECT universe_id, name, icon_url, created FROM games")}
+    last_upd = {r[0]: (r[1], r[2]) for r in con.execute(
+        "SELECT universe_id, MAX(ts), kind FROM updates WHERE ts > ? GROUP BY universe_id", (then - 3600,))}
+    total_now, total_then = len(r_now), len(r_then)
+    out = []
+    for uid, (rank, online) in r_now.items():
+        g = info.get(uid)
+        if not g:
+            continue
+        prev = r_then.get(uid)
+        lu = last_upd.get(uid)
+        out.append({
+            "id": uid, "name": g[1], "icon": g[2],
+            "rank": rank, "rank_then": prev[0] if prev else None,
+            "delta": (prev[0] - rank) if prev else None,  # >0 — поднялась
+            "online": online, "online_then": prev[1] if prev else None,
+            "new": prev is None,
+            "updated_ts": lu[0] if lu else None, "updated_kind": lu[1] if lu else None,
+        })
+    # Игры, которые были в списке, а сейчас без замера — выпали.
+    for uid, (rank, online) in r_then.items():
+        if uid not in r_now and uid in info:
+            out.append({"id": uid, "name": info[uid][1], "icon": info[uid][2], "rank": None,
+                        "rank_then": rank, "delta": None, "online": None, "online_then": online,
+                        "new": False, "gone": True, "updated_ts": None, "updated_kind": None})
+    return {"hours": hours, "now": now, "then": then, "total": total_now, "total_then": total_then, "games": out}

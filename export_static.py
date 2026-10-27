@@ -55,6 +55,8 @@ def main(out):
     for d in (7, 14, 28):
         dump(os.path.join(data, f"trends_{d}.json"), analytics.trends(con, d, cfg["new_game_days"]))
     dump(os.path.join(data, "updates.json"), analytics.updates_feed(con, 28))
+    for h in (3, 6, 12, 24):
+        dump(os.path.join(data, f"moves_{h}.json"), analytics.rank_moves(con, h))
 
     now = status["now"] or 0
     for g in games:

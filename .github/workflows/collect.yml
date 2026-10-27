@@ -2,7 +2,9 @@ name: Сбор данных и сайт
 
 on:
   schedule:
-    - cron: "7 * * * *"     # раз в час
+    # GitHub иногда пропускает запуски по расписанию, поэтому «стучимся» 4 раза в час,
+    # а сам сбор делаем, только если с прошлого прошло больше 40 минут (см. job check).
+    - cron: "4,19,34,49 * * * *"
   workflow_dispatch:         # кнопка «Run workflow»
   push:
     branches: [main]
@@ -17,7 +19,25 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.c.outputs.run }}
+    steps:
+      - id: c
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" != "schedule" ]; then echo "run=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          last=$(gh api "repos/${{ github.repository }}/commits/data" --jq .commit.committer.date 2>/dev/null || echo "")
+          if [ -z "$last" ]; then echo "run=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          age=$(( $(date +%s) - $(date -d "$last" +%s) ))
+          echo "последний сбор $((age / 60)) мин назад"
+          if [ $age -ge 2400 ]; then echo "run=true" >> "$GITHUB_OUTPUT"; else echo "run=false" >> "$GITHUB_OUTPUT"; fi
+
   collect:
+    needs: check
+    if: needs.check.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:

@@ -157,6 +157,8 @@ def make_handler(cfg, path, demo=False, log=print):
                     return self._json(d) if d else self._json({"error": "нет такой игры"}, 404)
                 if u.path == "/api/trends":
                     return self._json(analytics.trends(con, int(q.get("days", 14)), cfg["new_game_days"]))
+                if u.path == "/api/moves":
+                    return self._json(analytics.rank_moves(con, int(q.get("hours", 6))))
                 if u.path == "/api/updates":
                     return self._json(analytics.updates_feed(con, int(q.get("days", 28))))
                 return self._json({"error": "not found"}, 404)
