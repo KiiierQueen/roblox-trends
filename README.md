@@ -6,6 +6,17 @@
 
 Нужен только Python 3.9+ — сторонние библиотеки не требуются.
 
+## Онлайн-версия (GitHub)
+
+Сайт: **https://kiiierqueen.github.io/roblox-trends/**
+
+- Раз в час GitHub Actions (`.github/workflows/collect.yml`) запускает `run.py collect`
+  на серверах GitHub, сохраняет базу в ветку `data` и публикует сайт на GitHub Pages.
+- Запустить сбор вручную: вкладка **Actions → «Сбор данных и сайт» → Run workflow**.
+- Свои игры: впишите ссылки в `games.txt` (по одной в строке) прямо на GitHub.
+- GitHub может отключить расписание, если в репозитории 60 дней не было активности —
+  тогда достаточно нажать «Enable workflow» во вкладке Actions.
+
 ## Запуск — одна команда
 
 ```
