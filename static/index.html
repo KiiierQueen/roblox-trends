@@ -42,6 +42,7 @@
   --shadow: 0 10px 40px rgba(0,0,0,.6);
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body { margin: 0; background: var(--page); color: var(--text);
   font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 button, input, select { font: inherit; color: inherit; }
@@ -265,6 +266,16 @@ del { background: var(--del-bg); color: var(--text-2); border-radius: 3px; }
   </section>
 </div>
 
+<div id="login" hidden style="position:fixed;inset:0;z-index:20;background:var(--page);display:flex;align-items:center;justify-content:center;padding:16px">
+  <form id="loginForm" class="card" style="width:100%;max-width:340px;padding:24px">
+    <h2 style="margin:0 0 16px;font-size:19px">Roblox Trend Tracker</h2>
+    <input id="loginPw" type="password" inputmode="numeric" autocomplete="current-password" placeholder="Пароль"
+      style="width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--border);background:var(--page);margin-bottom:10px;font-size:16px">
+    <div id="loginErr" style="color:var(--down-text);font-size:14px;min-height:20px"></div>
+    <button class="btn primary" id="loginBtn" style="width:100%;padding:11px">Войти</button>
+  </form>
+</div>
+
 <div class="overlay" id="overlay">
   <div class="modal" id="modal"></div>
 </div>
@@ -297,12 +308,50 @@ function staticPath(path) {
   if (m) return `data/game/${m[1]}.json`;
   return null;
 }
+// ---------- пароль (статичный сайт) ----------
+let AUTH = null, CRYPTO_KEY = null;
+const hex = b => [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, "0")).join("");
+const unhex = h => new Uint8Array(h.match(/../g).map(x => parseInt(x, 16)));
+async function deriveKey(password) {
+  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits({name: "PBKDF2", hash: "SHA-256",
+    salt: new TextEncoder().encode(AUTH.salt), iterations: AUTH.iterations}, base, 512);
+  return new Uint8Array(bits);
+}
+// Формат: 16 байт IV + AES-256-CTR шифротекст + 32 байта HMAC-SHA256 (см. vault.py)
+let MAC_KEY = null;
+async function useRawKey(raw) {
+  CRYPTO_KEY = await crypto.subtle.importKey("raw", raw.slice(0, 32), "AES-CTR", false, ["decrypt"]);
+  MAC_KEY = await crypto.subtle.importKey("raw", raw.slice(32, 64), {name: "HMAC", hash: "SHA-256"}, false, ["verify"]);
+}
+async function fetchDecrypted(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error("http " + r.status);
+  const b = new Uint8Array(await r.arrayBuffer());
+  const iv = b.slice(0, 16), ct = b.slice(16, b.length - 32), tag = b.slice(b.length - 32);
+  const ok = await crypto.subtle.verify("HMAC", MAC_KEY, tag, b.slice(0, b.length - 32));
+  if (!ok) throw new Error("bad password");
+  const plain = await crypto.subtle.decrypt({name: "AES-CTR", counter: iv, length: 128}, CRYPTO_KEY, ct);
+  return JSON.parse(new TextDecoder().decode(plain));
+}
+const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const lsSet = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} };
+const bust = () => "?v=" + Math.floor(Date.now() / 300000);
+
 async function api(path, opts) {
   if (STATIC) {
     const sp = staticPath(path);
     if (!sp || (opts && opts.method === "POST")) return {ok: false, message: "Недоступно на сайте"};
-    const r = await fetch(sp + "?v=" + Math.floor(Date.now() / 300000));
-    return r.ok ? r.json() : (path.includes("/game/") ? {game: {}, snapshots: [], updates: []} : []);
+    const empty = path.includes("/game/") ? {game: {}, snapshots: [], updates: []} : [];
+    if (AUTH && AUTH.encrypted) {
+      try { return await fetchDecrypted(sp.replace(/\.json$/, ".bin") + bust()); }
+      catch (e) {
+        if (String(e).includes("http")) return empty;
+        lsSet("rtt_key", null); showLogin("Пароль изменился — войдите снова"); throw e;
+      }
+    }
+    const r = await fetch(sp + bust());
+    return r.ok ? r.json() : empty;
   }
   const r = await fetch(path, opts); return r.json();
 }
@@ -676,12 +725,47 @@ async function loadStatus() {
 
 async function loadGames() { GAMES = await api("/api/games"); renderTable(); }
 
-(async () => {
+function showLogin(msg) {
+  $("#login").hidden = false; $("#loginErr").textContent = msg || "";
+  setTimeout(() => $("#loginPw").focus(), 50);
+}
+$("#loginForm").onsubmit = async e => {
+  e.preventDefault();
+  const btn = $("#loginBtn"); btn.disabled = true; btn.textContent = "Проверяю…"; $("#loginErr").textContent = "";
+  try {
+    const raw = await deriveKey($("#loginPw").value);
+    await useRawKey(raw);
+    await fetchDecrypted("data/status.bin" + bust());
+    lsSet("rtt_key", hex(raw));
+    $("#login").hidden = true; $("#loginPw").value = "";
+    start();
+  } catch (err) {
+    $("#loginErr").textContent = "Неверный пароль";
+  } finally { btn.disabled = false; btn.textContent = "Войти"; }
+};
+
+async function boot() {
+  if (STATIC) {
+    try { AUTH = await (await fetch("data/auth.json" + bust())).json(); } catch (e) { AUTH = {encrypted: false}; }
+    if (AUTH.encrypted) {
+      const saved = lsGet("rtt_key");
+      if (!saved) return showLogin();
+      try { await useRawKey(unhex(saved)); await fetchDecrypted("data/status.bin" + bust()); }
+      catch (e) { lsSet("rtt_key", null); return showLogin(); }
+    }
+  }
+  start();
+}
+
+let started = false;
+async function start() {
+  if (started) return; started = true;
   await loadStatus();
   await loadGames();
   if (STATUS.collecting) pollStatus();
   setInterval(async () => { const was = STATUS.now; await loadStatus(); if (STATUS.now !== was) loadGames(); }, 60000);
-})();
+}
+boot();
 </script>
 </body>
 </html>

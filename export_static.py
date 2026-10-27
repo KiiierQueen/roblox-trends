@@ -11,24 +11,39 @@ import time
 import analytics
 import config
 import db
+import vault
 
 DAY = 86400
 KEEP_DAYS = 120  # сколько дней истории отдавать на графики
 
 
+# Если задан SITE_PASSWORD — все данные шифруются, сайт спросит пароль.
+KEY = None
+
+
 def dump(path, obj):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(obj, f, ensure_ascii=False, separators=(",", ":"))
+    raw = json.dumps(obj, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    if KEY:
+        with open(path[:-5] + ".bin", "wb") as f:
+            f.write(vault.encrypt(KEY, raw))
+    else:
+        with open(path, "wb") as f:
+            f.write(raw)
 
 
 def main(out):
+    global KEY
+    pw = os.environ.get("SITE_PASSWORD", "")
+    KEY = vault.derive_key(pw) if pw else None
     cfg = config.load()
     con = db.connect(config.db_path(cfg))
     if os.path.exists(out):
         shutil.rmtree(out)
     data = os.path.join(out, "data")
     os.makedirs(os.path.join(data, "game"))
+    with open(os.path.join(data, "auth.json"), "w", encoding="utf-8") as f:
+        json.dump({"encrypted": bool(KEY), "salt": vault.SALT.decode(), "iterations": vault.ITERATIONS}, f)
 
     status = analytics.status(con)
     status.update(static=True, demo=False, collecting=False, progress="", manual_games=[],
@@ -58,7 +73,7 @@ def main(out):
         f.write(html)
     with open(os.path.join(out, ".nojekyll"), "w") as f:
         f.write("")
-    print(f"Сайт выгружен в {out}: {len(games)} игр")
+    print(f"Сайт выгружен в {out}: {len(games)} игр" + (", данные зашифрованы" if KEY else ""))
 
 
 if __name__ == "__main__":

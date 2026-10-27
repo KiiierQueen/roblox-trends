@@ -20,6 +20,8 @@ jobs:
   collect:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
@@ -34,7 +36,12 @@ jobs:
         run: |
           mkdir -p data
           if git fetch --depth=1 origin data 2>/dev/null; then
-            git show origin/data:tracker.db > data/tracker.db
+            if git cat-file -e origin/data:tracker.db.enc 2>/dev/null; then
+              git show origin/data:tracker.db.enc > /tmp/tracker.db.enc
+              python vault.py dec /tmp/tracker.db.enc data/tracker.db
+            else
+              git show origin/data:tracker.db > data/tracker.db   # старая незашифрованная база
+            fi
             echo "база: $(du -h data/tracker.db | cut -f1)"
           else
             echo "базы ещё нет — первый запуск"
@@ -45,10 +52,15 @@ jobs:
 
       - name: Сохранить базу в ветку data
         run: |
-          rm -rf /tmp/d && mkdir /tmp/d && cp data/tracker.db /tmp/d/
+          rm -rf /tmp/d && mkdir /tmp/d
+          if [ -n "$SITE_PASSWORD" ]; then
+            python vault.py enc data/tracker.db /tmp/d/tracker.db.enc
+          else
+            cp data/tracker.db /tmp/d/
+          fi
           cd /tmp/d
           git init -q -b data
-          git add tracker.db
+          git add -A
           git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
             commit -qm "data $(date -u +%FT%TZ)"
           git push -qf "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" data
