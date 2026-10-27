@@ -106,6 +106,14 @@ def run_once(cfg, path, log=print):
                               (uid,)).fetchone()
             if old and (old["name"] != name or old["description"] != desc or old["updated"] != updated):
                 text_changed = old["name"] != name or old["description"] != desc
+                # Некоторые игры публикуют версию каждые несколько минут. Такие «пустые» публикации
+                # склеиваем: если последняя запись за 6 часов — тоже публикация, просто продлеваем её.
+                last = con.execute("SELECT id, kind, ts FROM updates WHERE universe_id=? ORDER BY ts DESC LIMIT 1",
+                                   (uid,)).fetchone()
+                if not text_changed and last and last["kind"] == "publish" and ts - last["ts"] < 6 * 3600:
+                    con.execute("UPDATE updates SET new_updated=? WHERE id=?", (updated, last["id"]))
+                    old = None
+            if old and (old["name"] != name or old["description"] != desc or old["updated"] != updated):
                 con.execute(
                     "INSERT INTO updates(universe_id, ts, kind, old_name, new_name, old_description, "
                     "new_description, old_updated, new_updated) VALUES(?,?,?,?,?,?,?,?,?)",
