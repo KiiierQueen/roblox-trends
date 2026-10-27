@@ -1,0 +1,687 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roblox Trend Tracker</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#1a1a19">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="RBX Тренды">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+:root {
+  --page: #f9f9f7; --surface: #fcfcfb; --surface-2: #f0efec; --border: #e2e1dc;
+  --text: #0b0b0b; --text-2: #52514e; --muted: #8a8984;
+  --accent: #2a78d6; --accent-soft: rgba(42,120,214,.12);
+  --up: #0ca30c; --up-text: #006300; --down: #d23b30; --down-text: #a8231a;
+  --mark: #c76a00; --ins-bg: rgba(12,163,12,.16); --del-bg: rgba(210,59,48,.14);
+  --shadow: 0 10px 40px rgba(0,0,0,.18);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #0d0d0d; --surface: #1a1a19; --surface-2: #252523; --border: #33332f;
+    --text: #f0efec; --text-2: #c3c2b7; --muted: #8d8c85;
+    --accent: #3987e5; --accent-soft: rgba(57,135,229,.18);
+    --up: #2fbf2f; --up-text: #6fdc6f; --down: #e5554a; --down-text: #ff8f86;
+    --mark: #f0a030; --ins-bg: rgba(47,191,47,.2); --del-bg: rgba(229,85,74,.2);
+    --shadow: 0 10px 40px rgba(0,0,0,.6);
+  }
+}
+:root[data-theme="dark"] {
+  --page: #0d0d0d; --surface: #1a1a19; --surface-2: #252523; --border: #33332f;
+  --text: #f0efec; --text-2: #c3c2b7; --muted: #8d8c85;
+  --accent: #3987e5; --accent-soft: rgba(57,135,229,.18);
+  --up: #2fbf2f; --up-text: #6fdc6f; --down: #e5554a; --down-text: #ff8f86;
+  --mark: #f0a030; --ins-bg: rgba(47,191,47,.2); --del-bg: rgba(229,85,74,.2);
+  --shadow: 0 10px 40px rgba(0,0,0,.6);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--text);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+button, input, select { font: inherit; color: inherit; }
+a { color: var(--accent); }
+.wrap { max-width: 1400px; margin: 0 auto; padding: 16px; }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-bottom: 12px; }
+h1 { font-size: 20px; margin: 0; letter-spacing: -.01em; }
+h1 small { font-weight: 400; color: var(--muted); font-size: 13px; margin-left: 6px; }
+.stat { color: var(--text-2); font-size: 13px; }
+.spacer { flex: 1; }
+.btn { border: 1px solid var(--border); background: var(--surface); padding: 6px 12px; border-radius: 8px;
+  cursor: pointer; white-space: nowrap; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn:disabled { opacity: .6; cursor: default; }
+.banner { padding: 10px 14px; border-radius: 10px; margin-bottom: 12px; border: 1px solid var(--border);
+  background: var(--surface); }
+.banner.warn { border-color: var(--down); }
+.banner.info { border-color: var(--accent); }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 14px; overflow-x: auto; }
+.tab { padding: 8px 14px; border: 0; background: none; cursor: pointer; color: var(--text-2);
+  border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
+.tab.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.toolbar input[type=search] { flex: 1 1 220px; min-width: 0; padding: 7px 10px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface); }
+.chips { display: flex; gap: 4px; flex-wrap: wrap; }
+.chip { padding: 5px 11px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface);
+  cursor: pointer; font-size: 13px; }
+.chip.active { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+select { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+th { font-size: 12px; color: var(--text-2); font-weight: 600; position: sticky; top: 0; background: var(--surface);
+  cursor: pointer; user-select: none; }
+th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
+th .arr { color: var(--accent); }
+tbody tr { cursor: pointer; }
+tbody tr:hover { background: var(--surface-2); }
+.game { display: flex; align-items: center; gap: 10px; min-width: 240px; max-width: 420px; }
+.game img, .game .ph { width: 34px; height: 34px; border-radius: 8px; flex: none; background: var(--surface-2);
+  object-fit: cover; }
+.game .nm { overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+.game .sub { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+.badge { display: inline-block; font-size: 11px; line-height: 16px; padding: 0 6px; white-space: nowrap; border-radius: 99px; margin-left: 6px;
+  border: 1px solid var(--border); color: var(--text-2); font-weight: 500; vertical-align: 1px; }
+.badge.new { border-color: var(--accent); color: var(--accent); }
+.badge.upd { border-color: var(--mark); color: var(--mark); }
+.g { border-radius: 6px; padding: 3px 8px; display: inline-block; min-width: 92px; text-align: right; }
+.g .p { font-weight: 600; }
+.g .x { font-size: 11px; color: var(--text-2); margin-left: 4px; }
+.g.up .p { color: var(--up-text); }
+.g.down .p { color: var(--down-text); }
+.g.na { color: var(--muted); }
+.spark { display: block; }
+.empty { padding: 40px; text-align: center; color: var(--text-2); }
+
+/* modal */
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none; z-index: 10;
+  align-items: flex-start; justify-content: center; padding: 24px 12px; overflow-y: auto; }
+.overlay.open { display: flex; }
+.modal { width: min(1100px, 100%); background: var(--surface); border-radius: 14px; box-shadow: var(--shadow);
+  padding: 18px; position: relative; }
+.modal .close { position: absolute; right: 12px; top: 10px; border: 0; background: none; font-size: 24px;
+  cursor: pointer; color: var(--text-2); }
+.mhead { display: flex; gap: 14px; align-items: center; margin-bottom: 10px; padding-right: 30px; }
+.mhead img { width: 64px; height: 64px; border-radius: 12px; }
+.mhead h2 { margin: 0; font-size: 19px; }
+.kpis { display: flex; gap: 10px; flex-wrap: wrap; margin: 10px 0 14px; }
+.kpi { background: var(--surface-2); border-radius: 10px; padding: 8px 12px; min-width: 120px; }
+.kpi .l { font-size: 12px; color: var(--text-2); }
+.kpi .v { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.chart-box { position: relative; height: 320px; }
+.legend { display: flex; gap: 16px; font-size: 12px; color: var(--text-2); margin: 6px 0 4px; flex-wrap: wrap; }
+.legend i { display: inline-block; vertical-align: middle; margin-right: 5px; }
+.updates { margin-top: 16px; }
+.uitem { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+.uitem.hl { border-color: var(--mark); box-shadow: 0 0 0 2px var(--mark) inset; }
+.uitem .when { font-size: 12px; color: var(--text-2); margin-bottom: 4px; }
+.uitem .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-top: 6px; }
+.diff { white-space: pre-wrap; word-break: break-word; font-size: 13px; }
+ins { background: var(--ins-bg); text-decoration: none; border-radius: 3px; }
+del { background: var(--del-bg); color: var(--text-2); border-radius: 3px; }
+.mark-w { background: rgba(240,160,48,.3); border-radius: 3px; padding: 0 2px; }
+
+/* trends */
+.grid2 { display: grid; grid-template-columns: 1.15fr 1fr; gap: 14px; }
+@media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
+.section { padding: 14px; }
+.section h3 { margin: 0 0 4px; font-size: 15px; }
+.hint { color: var(--text-2); font-size: 12px; margin: 0 0 10px; }
+.word { border-top: 1px solid var(--border); padding: 10px 0; }
+.word:first-of-type { border-top: 0; }
+.word .w { font-size: 16px; font-weight: 700; cursor: pointer; }
+.word .w:hover { color: var(--accent); }
+.word .meta { color: var(--text-2); font-size: 12px; margin-left: 8px; }
+.gchips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.gchip { font-size: 12px; padding: 2px 8px; border-radius: 99px; background: var(--surface-2); cursor: pointer; }
+.gchip:hover { outline: 1px solid var(--accent); }
+.snip { font-size: 12px; color: var(--text-2); margin-top: 4px; }
+.bar { height: 8px; border-radius: 4px; background: var(--accent); opacity: .8; }
+.manual-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.manual-list div { display: flex; justify-content: space-between; gap: 8px; font-size: 13px;
+  background: var(--surface-2); padding: 4px 8px; border-radius: 6px; word-break: break-all; }
+.popover { position: absolute; right: 16px; top: 60px; width: min(420px, calc(100vw - 32px)); z-index: 5;
+  padding: 14px; box-shadow: var(--shadow); display: none; }
+.popover.open { display: block; }
+.row { display: flex; gap: 6px; }
+.row input { flex: 1; min-width: 0; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface); }
+@media (max-width: 640px) {
+  .wrap { padding: 12px 16px; padding-top: max(12px, env(safe-area-inset-top)); }
+  .chart-box { height: 240px; }
+  h1 { font-size: 18px; }
+  header .stat { order: 3; width: 100%; font-size: 12px; }
+  header .spacer { display: none; }
+  /* на телефоне: игра, онлайн, рост 7 и 14 дней */
+  #thead th:nth-child(3), #tbody td:nth-child(3),
+  #thead th:nth-child(6), #tbody td:nth-child(6),
+  #thead th:nth-child(7), #tbody td:nth-child(7),
+  #thead th:nth-child(8), #tbody td:nth-child(8),
+  #thead th:nth-child(9), #tbody td:nth-child(9) { display: none; }
+  th, td { padding: 7px 4px; }
+  th { white-space: normal; font-size: 11px; line-height: 1.2; }
+  td:first-child, th:first-child { padding-left: 8px; }
+  .game { min-width: 0; max-width: 31vw; gap: 6px; }
+  .game img, .game .ph { display: none; }
+  .game .sub { display: none; }
+  .game img, .game .ph { width: 28px; height: 28px; }
+  .game .nm { white-space: nowrap; font-size: 13px; }
+  .game .nm .badge { display: none; }
+  .g { min-width: 0; padding: 2px 4px; font-size: 13px; }
+  .g .x { display: none; }
+  .overlay { padding: 0; }
+  .modal { border-radius: 0; min-height: 100%; padding: 14px 16px; padding-top: max(14px, env(safe-area-inset-top)); }
+  .mhead img { width: 48px; height: 48px; }
+  .kpi { min-width: calc(50% - 5px); flex: 1; }
+  .toolbar select { flex: 1; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Roblox Trend Tracker <small id="sub"></small></h1>
+    <span class="stat" id="stat"></span>
+    <span class="spacer"></span>
+    <button class="btn" id="btnManual">Мои игры</button>
+    <button class="btn primary" id="btnCollect">Собрать сейчас</button>
+  </header>
+  <div class="card popover" id="manualPop">
+    <b>Ручной список игр</b>
+    <p class="hint">Ссылка на игру, placeId или <code>u:universeId</code>. Подхватится при следующем сборе.</p>
+    <div class="row"><input id="manualInput" placeholder="https://www.roblox.com/games/..."><button class="btn" id="manualAdd">Добавить</button></div>
+    <div class="manual-list" id="manualList"></div>
+  </div>
+  <div id="banners"></div>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="games">Игры</button>
+    <button class="tab" data-tab="trends">Тренды</button>
+    <button class="tab" data-tab="feed">Лента обновлений</button>
+  </nav>
+
+  <section id="tab-games">
+    <div class="toolbar">
+      <input type="search" id="search" placeholder="Поиск по названию и описанию…">
+      <div class="chips" id="filters">
+        <button class="chip active" data-f="all">Все</button>
+        <button class="chip" data-f="new">Новые в топе</button>
+        <button class="chip" data-f="updated">С обновлением за 14 дн.</button>
+        <button class="chip" data-f="manual">Мои</button>
+      </div>
+      <select id="minOnline" title="Минимальный онлайн">
+        <option value="0">Онлайн: любой</option>
+        <option value="100">от 100</option>
+        <option value="1000">от 1 000</option>
+        <option value="10000">от 10 000</option>
+      </select>
+    </div>
+    <div class="card table-wrap">
+      <table>
+        <thead><tr id="thead"></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <div class="empty" id="empty" hidden></div>
+    </div>
+  </section>
+
+  <section id="tab-trends" hidden>
+    <div class="toolbar">
+      <span class="stat">Период:</span>
+      <div class="chips" id="trendDays">
+        <button class="chip" data-d="7">7 дней</button>
+        <button class="chip active" data-d="14">14 дней</button>
+        <button class="chip" data-d="28">28 дней</button>
+      </div>
+      <span class="stat" id="trendNote"></span>
+    </div>
+    <div class="grid2">
+      <div class="card section">
+        <h3>Новые слова в обновлениях</h3>
+        <p class="hint">Слова, которые игры добавили в название или описание за период. Сверху — то, что добавили сразу несколько игр; растущие игры весят больше.</p>
+        <div id="updWords"></div>
+      </div>
+      <div class="card section">
+        <h3>Слова быстро растущих игр</h3>
+        <p class="hint">Слова, которые у растущих игр встречаются заметно чаще, чем у остальных. Клик по слову — игры с ним.</p>
+        <div id="growWords"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-feed" hidden>
+    <div class="toolbar">
+      <input type="search" id="feedSearch" placeholder="Фильтр по тексту обновления…">
+    </div>
+    <div id="feed"></div>
+  </section>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="modal" id="modal"></div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt = n => n == null ? "—" : n >= 1e9 ? (n/1e9).toFixed(1)+"B" : n >= 1e6 ? (n/1e6).toFixed(1)+"M" : n >= 1e4 ? (n/1e3).toFixed(1)+"K" : Math.round(n).toLocaleString("ru-RU");
+const fmtFull = n => n == null ? "—" : Math.round(n).toLocaleString("ru-RU");
+const dt = ts => new Date(ts*1000).toLocaleString("ru-RU", {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"});
+const dDate = ts => new Date(ts*1000).toLocaleDateString("ru-RU", {day:"numeric", month:"short"});
+function ago(ts) {
+  if (!ts) return "—";
+  const s = Date.now()/1000 - ts;
+  if (s < 3600) return Math.max(1, Math.round(s/60)) + " мин назад";
+  if (s < 86400) return Math.round(s/3600) + " ч назад";
+  return Math.round(s/86400) + " дн. назад";
+}
+const isoTs = s => s ? Date.parse(s)/1000 : null;
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const STATIC = !!window.STATIC_MODE;
+function staticPath(path) {
+  const u = new URL(path, "http://x");
+  const p = u.pathname;
+  if (p === "/api/status") return "data/status.json";
+  if (p === "/api/games") return "data/games.json";
+  if (p === "/api/updates") return "data/updates.json";
+  if (p === "/api/trends") return `data/trends_${u.searchParams.get("days") || 14}.json`;
+  const m = p.match(/^\/api\/game\/(\d+)$/);
+  if (m) return `data/game/${m[1]}.json`;
+  return null;
+}
+async function api(path, opts) {
+  if (STATIC) {
+    const sp = staticPath(path);
+    if (!sp || (opts && opts.method === "POST")) return {ok: false, message: "Недоступно на сайте"};
+    const r = await fetch(sp + "?v=" + Math.floor(Date.now() / 300000));
+    return r.ok ? r.json() : (path.includes("/game/") ? {game: {}, snapshots: [], updates: []} : []);
+  }
+  const r = await fetch(path, opts); return r.json();
+}
+
+let STATUS = {}, GAMES = [], sortKey = "g14", sortDir = -1, filter = "all";
+
+const COLS = [
+  {k:"name", t:"Игра"},
+  {k:"online", t:"Онлайн сейчас", num:1},
+  {k:"spark", t:"28 дней", nosort:1},
+  {k:"g7", t:"Рост 7 дн.", num:1},
+  {k:"g14", t:"Рост 14 дн.", num:1},
+  {k:"g28", t:"Рост 28 дн.", num:1},
+  {k:"visits", t:"Визиты", num:1},
+  {k:"updated", t:"Обновлена", num:1},
+  {k:"first_seen_top", t:"В топе с", num:1},
+];
+
+function sortVal(g, k) {
+  if (k === "name") return (g.name||"").toLowerCase();
+  if (k[0] === "g" && /^g\d+$/.test(k)) return g[k]?.ratio ?? (g[k] ? 1e9 : null);
+  if (k === "updated") return isoTs(g.updated);
+  return g[k];
+}
+
+function growthCell(x, hist) {
+  if (!x) return `<span class="g na" title="Мало истории: нужно, чтобы трекер работал дольше этого периода">—</span>`;
+  if (x.ratio == null) return `<span class="g up" title="Было 0 онлайна"><span class="p">новая</span></span>`;
+  const r = x.ratio, t = Math.max(-1, Math.min(1, Math.log2(r) / 2));
+  const a = (0.06 + 0.34 * Math.abs(t)).toFixed(2);
+  const bg = r >= 1 ? `rgba(12,163,12,${a})` : `rgba(210,59,48,${a})`;
+  const cls = r >= 1.02 ? "up" : r <= 0.98 ? "down" : "";
+  const p = (x.pct > 0 ? "+" : x.pct < 0 ? "−" : "") + Math.abs(x.pct).toFixed(Math.abs(x.pct) < 10 ? 1 : 0) + "%";
+  return `<span class="g ${cls}" style="background:${Math.abs(t) > .02 ? bg : "transparent"}" title="${fmtFull(x.from)} → ${fmtFull(x.to)} (средний онлайн за сутки)"><span class="p">${r >= 1.02 ? "▲" : r <= .98 ? "▼" : ""} ${p}</span><span class="x">×${r.toFixed(2)}</span></span>`;
+}
+
+function spark(vals) {
+  const pts = vals.map((v, i) => [i, v]).filter(p => p[1] != null);
+  if (pts.length < 2) return "";
+  const max = Math.max(...pts.map(p => p[1])), min = Math.min(...pts.map(p => p[1]));
+  const W = 96, H = 26, span = max - min || 1;
+  const d = pts.map(([i, v]) => `${(i/27*W).toFixed(1)},${(H - 2 - (v-min)/span*(H-4)).toFixed(1)}`).join(" ");
+  const last = pts[pts.length-1][1], firstV = pts[0][1];
+  const col = last >= firstV ? css("--up") : css("--down");
+  return `<svg class="spark" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><polyline points="${d}" fill="none" stroke="${col}" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
+}
+
+function gameCell(g) {
+  const img = g.icon ? `<img src="${esc(g.icon)}" loading="lazy" alt="" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'ph'}))">` : `<div class="ph"></div>`;
+  let b = "";
+  if (g.is_new) b += `<span class="badge new">новая</span>`;
+  if (g.is_manual) b += `<span class="badge">моя</span>`;
+  if (g.last_text_update && STATUS.now - g.last_text_update < 14*86400) b += `<span class="badge upd" title="Название/описание менялось ${ago(g.last_text_update)}">обновл.</span>`;
+  return `<div class="game">${img}<div style="min-width:0"><div class="nm">${esc(g.name)}${b}</div><div class="sub">${esc(g.creator || "")}</div></div></div>`;
+}
+
+function renderHead() {
+  $("#thead").innerHTML = COLS.map(c => `<th class="${c.num ? "num" : ""}" data-k="${c.k}">${c.t}${sortKey === c.k ? ` <span class="arr">${sortDir < 0 ? "▼" : "▲"}</span>` : ""}</th>`).join("");
+  document.querySelectorAll("#thead th").forEach(th => th.onclick = () => {
+    const k = th.dataset.k; if (COLS.find(c => c.k === k).nosort) return;
+    if (sortKey === k) sortDir = -sortDir; else { sortKey = k; sortDir = k === "name" ? 1 : -1; }
+    renderTable();
+  });
+}
+
+function filtered() {
+  const q = $("#search").value.trim().toLowerCase();
+  const min = +$("#minOnline").value;
+  return GAMES.filter(g => {
+    if (g.online < min) return false;
+    if (filter === "new" && !g.is_new) return false;
+    if (filter === "manual" && !g.is_manual) return false;
+    if (filter === "updated" && !(g.last_text_update && STATUS.now - g.last_text_update < 14*86400)) return false;
+    if (q && !((g.name||"").toLowerCase().includes(q) || (g.desc||"").toLowerCase().includes(q))) return false;
+    return true;
+  });
+}
+
+function renderTable() {
+  renderHead();
+  const rows = filtered().sort((a, b) => {
+    const x = sortVal(a, sortKey), y = sortVal(b, sortKey);
+    if (x == null && y == null) return (b.online||0) - (a.online||0);
+    if (x == null) return 1; if (y == null) return -1;
+    return (x > y ? 1 : x < y ? -1 : 0) * sortDir;
+  });
+  $("#tbody").innerHTML = rows.map(g => `<tr data-id="${g.id}">
+    <td>${gameCell(g)}</td>
+    <td class="num"><b>${fmt(g.online)}</b></td>
+    <td>${spark(g.spark)}</td>
+    <td class="num">${growthCell(g.g7)}</td>
+    <td class="num">${growthCell(g.g14)}</td>
+    <td class="num">${growthCell(g.g28)}</td>
+    <td class="num">${fmt(g.visits)}</td>
+    <td class="num" title="${esc(g.updated)}">${ago(isoTs(g.updated))}</td>
+    <td class="num">${g.first_seen_top ? dDate(g.first_seen_top) : "—"}</td></tr>`).join("");
+  const empty = $("#empty");
+  empty.hidden = rows.length > 0;
+  if (!rows.length) empty.textContent = GAMES.length ? "Ничего не найдено по фильтрам." : "Данных пока нет. Нажмите «Собрать сейчас» и подождите пару минут.";
+  document.querySelectorAll("#tbody tr").forEach(tr => tr.onclick = () => openGame(+tr.dataset.id));
+}
+
+// ---------- word diff ----------
+function diffWords(a, b) {
+  a = a || ""; b = b || "";
+  if (a === b) return esc(b);
+  const A = a.split(/(\s+)/), B = b.split(/(\s+)/);
+  if (A.length * B.length > 4e6) return `<del>${esc(a)}</del>\n<ins>${esc(b)}</ins>`;
+  const n = A.length, m = B.length, L = Array.from({length: n+1}, () => new Uint16Array(m+1));
+  for (let i = n-1; i >= 0; i--) for (let j = m-1; j >= 0; j--)
+    L[i][j] = A[i] === B[j] ? L[i+1][j+1] + 1 : Math.max(L[i+1][j], L[i][j+1]);
+  let i = 0, j = 0, out = [], buf = {t: null, s: ""};
+  const push = (t, s) => { if (buf.t === t) buf.s += s; else { flush(); buf = {t, s}; } };
+  const flush = () => { if (!buf.s) return; out.push(buf.t === "d" ? `<del>${esc(buf.s)}</del>` : buf.t === "i" ? `<ins>${esc(buf.s)}</ins>` : esc(buf.s)); };
+  while (i < n && j < m) {
+    if (A[i] === B[j]) { push("=", A[i]); i++; j++; }
+    else if (L[i+1][j] >= L[i][j+1]) push("d", A[i++]);
+    else push("i", B[j++]);
+  }
+  while (i < n) push("d", A[i++]);
+  while (j < m) push("i", B[j++]);
+  flush();
+  return out.join("");
+}
+
+function updateHtml(u, opts = {}) {
+  const nameCh = u.old_name !== u.new_name, descCh = u.old_description !== u.new_description;
+  let tags = [];
+  if (nameCh) tags.push(`<span class="badge upd">название</span>`);
+  if (descCh) tags.push(`<span class="badge upd">описание</span>`);
+  if (u.old_updated !== u.new_updated) tags.push(`<span class="badge">новая версия</span>`);
+  let body = "";
+  if (nameCh) body += `<div class="lbl">Название: было → стало</div><div class="diff">${diffWords(u.old_name, u.new_name)}</div>`;
+  if (descCh) body += `<div class="lbl">Описание</div><div class="diff">${diffWords(u.old_description, u.new_description)}</div>`;
+  if (!nameCh && !descCh) body = `<div class="hint" style="margin:0">Опубликована новая версия, текст не менялся.</div>`;
+  const head = opts.game ? `<a href="#" data-open="${u.universe_id}"><b>${esc(u.game_name)}</b></a> · ` : "";
+  return `<div class="uitem" id="upd-${u.id}"><div class="when">${head}${dt(u.ts)} ${tags.join("")}</div>${body}</div>`;
+}
+
+// ---------- game card ----------
+let chart;
+async function openGame(id) {
+  const ov = $("#overlay"), m = $("#modal");
+  m.innerHTML = `<div class="empty">Загрузка…</div>`; ov.classList.add("open");
+  const d = await api("/api/game/" + id);
+  const g = d.game, row = GAMES.find(x => x.id === id) || {};
+  const link = g.root_place_id ? `https://www.roblox.com/games/${g.root_place_id}` : null;
+  const textUps = d.updates.filter(u => u.kind === "text");
+  const pubUps = d.updates.filter(u => u.kind !== "text");
+  m.innerHTML = `
+    <button class="close" aria-label="Закрыть">×</button>
+    <div class="mhead">${g.icon_url ? `<img src="${esc(g.icon_url)}" alt="">` : ""}
+      <div><h2>${esc(g.name)}</h2><div class="stat">${esc(g.creator || "")}${link ? ` · <a href="${link}" target="_blank" rel="noopener">открыть в Roblox ↗</a>` : ""}</div></div></div>
+    <div class="kpis">
+      <div class="kpi"><div class="l">Онлайн сейчас</div><div class="v">${fmtFull(row.online ?? g.playing)}</div></div>
+      <div class="kpi"><div class="l">Рост 7 дн.</div><div class="v">${growthCell(row.g7)}</div></div>
+      <div class="kpi"><div class="l">Рост 14 дн.</div><div class="v">${growthCell(row.g14)}</div></div>
+      <div class="kpi"><div class="l">Рост 28 дн.</div><div class="v">${growthCell(row.g28)}</div></div>
+      <div class="kpi"><div class="l">Визиты</div><div class="v">${fmt(g.visits)}</div></div>
+      <div class="kpi"><div class="l">Последняя версия</div><div class="v" style="font-size:15px">${ago(isoTs(g.updated))}</div></div>
+    </div>
+    <div class="toolbar"><div class="chips" id="range">
+      <button class="chip" data-r="7">7 дн.</button><button class="chip" data-r="14">14 дн.</button>
+      <button class="chip active" data-r="28">28 дн.</button><button class="chip" data-r="0">Всё</button></div></div>
+    <div class="legend"><span><i style="width:16px;height:2px;background:${css("--accent")}"></i>Онлайн</span>
+      <span><i style="width:0;height:0;border:6px solid transparent;border-bottom:10px solid ${css("--mark")};border-top:0"></i>Изменили название/описание</span>
+      <span><i style="width:7px;height:7px;border-radius:50%;background:${css("--muted")}"></i>Новая версия без изменения текста</span></div>
+    <div class="chart-box"><canvas id="chart"></canvas></div>
+    <div class="updates">
+      <h3 style="margin:0 0 8px;font-size:15px">Обновления (${textUps.length})</h3>
+      ${textUps.length ? textUps.map(u => updateHtml(u)).join("") : `<p class="hint">Изменений названия и описания пока не замечено.</p>`}
+      ${pubUps.length ? `<details><summary class="stat" style="cursor:pointer">Публикации версий без изменения текста: ${pubUps.length}</summary>${pubUps.map(u => updateHtml(u)).join("")}</details>` : ""}
+    </div>
+    <details style="margin-top:10px"><summary class="stat" style="cursor:pointer">Текущее описание</summary><div class="diff" style="margin-top:6px">${esc(g.description)}</div></details>`;
+  m.querySelector(".close").onclick = closeModal;
+  drawChart(d, 28);
+  m.querySelectorAll("#range .chip").forEach(b => b.onclick = () => {
+    m.querySelectorAll("#range .chip").forEach(x => x.classList.toggle("active", x === b));
+    drawChart(d, +b.dataset.r);
+  });
+}
+function closeModal() { $("#overlay").classList.remove("open"); if (chart) { chart.destroy(); chart = null; } }
+$("#overlay").addEventListener("click", e => { if (e.target.id === "overlay") closeModal(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal(); });
+
+function valueAt(snaps, ts) {
+  let best = null, bd = Infinity;
+  for (const [t, p] of snaps) { const dd = Math.abs(t - ts); if (dd < bd) { bd = dd; best = p; } }
+  return best;
+}
+
+const vlines = {
+  id: "vlines",
+  afterDatasetsDraw(c, args, o) {
+    const xs = c.scales.x, ya = c.scales.y, ctx = c.ctx;
+    ctx.save(); ctx.strokeStyle = o.color; ctx.setLineDash([4, 4]); ctx.lineWidth = 1;
+    for (const t of o.lines || []) {
+      if (t < xs.min || t > xs.max) continue;
+      const x = xs.getPixelForValue(t);
+      ctx.beginPath(); ctx.moveTo(x, ya.top); ctx.lineTo(x, ya.bottom); ctx.stroke();
+    }
+    ctx.restore();
+  }
+};
+
+function drawChart(d, days) {
+  if (chart) chart.destroy();
+  const snaps = d.snapshots;
+  if (!snaps.length) return;
+  const end = snaps[snaps.length-1][0], start = days ? end - days*86400 : snaps[0][0];
+  const vis = snaps.filter(s => s[0] >= start);
+  const text = d.updates.filter(u => u.kind === "text" && u.ts >= start);
+  const pub = d.updates.filter(u => u.kind !== "text" && u.ts >= start);
+  const ink = css("--text-2"), grid = css("--border"), accent = css("--accent"), mark = css("--mark");
+  chart = new Chart($("#chart"), {
+    data: { datasets: [
+      { type: "line", label: "Онлайн", data: vis.map(([t, p]) => ({x: t*1000, y: p})), borderColor: accent,
+        backgroundColor: accent + "22", fill: true, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: .25, order: 2 },
+      { type: "scatter", label: "Изменение текста", data: text.map(u => ({x: u.ts*1000, y: valueAt(snaps, u.ts), u})),
+        pointStyle: "triangle", pointRadius: 9, pointHoverRadius: 12, backgroundColor: mark,
+        borderColor: css("--surface"), borderWidth: 2, order: 0 },
+      { type: "scatter", label: "Новая версия", data: pub.map(u => ({x: u.ts*1000, y: valueAt(snaps, u.ts), u})),
+        pointRadius: 4, pointHoverRadius: 7, backgroundColor: css("--muted"),
+        borderColor: css("--surface"), borderWidth: 2, order: 1 },
+    ]},
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false, parsing: false,
+      interaction: { mode: "nearest", intersect: false, axis: "x" },
+      scales: {
+        x: { type: "linear", min: start*1000, max: end*1000, grid: { color: grid, drawTicks: false },
+             border: { display: false },
+             ticks: { color: ink, maxTicksLimit: 8, padding: 6, callback: v => new Date(v).toLocaleDateString("ru-RU", {day: "numeric", month: "short"}) } },
+        y: { beginAtZero: true, grid: { color: grid, drawTicks: false }, border: { display: false },
+             ticks: { color: ink, padding: 6, callback: v => fmt(v) } },
+      },
+      plugins: {
+        legend: { display: false },
+        vlines: { lines: text.map(u => u.ts*1000), color: mark },
+        tooltip: {
+          callbacks: {
+            title: items => new Date(items[0].parsed.x).toLocaleString("ru-RU", {day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit"}),
+            label: it => {
+              const u = it.raw.u;
+              if (!u) return ` Онлайн: ${fmtFull(it.parsed.y)}`;
+              const parts = [];
+              if (u.old_name !== u.new_name) parts.push("название");
+              if (u.old_description !== u.new_description) parts.push("описание");
+              return parts.length ? ` Изменено: ${parts.join(", ")} (клик — подробнее)` : " Новая версия";
+            },
+          },
+        },
+      },
+      onClick: (e, els) => {
+        const el = els.find(x => x.datasetIndex > 0); if (!el) return;
+        const u = chart.data.datasets[el.datasetIndex].data[el.index].u;
+        const node = document.getElementById("upd-" + u.id); if (!node) return;
+        const det = node.closest("details"); if (det) det.open = true;
+        node.scrollIntoView({behavior: "smooth", block: "center"});
+        node.classList.add("hl"); setTimeout(() => node.classList.remove("hl"), 2000);
+      },
+    },
+    plugins: [vlines],
+  });
+}
+
+// ---------- trends ----------
+let trendDays = 14;
+function ratioTxt(r) { return r ? (r >= 1 ? "+" : "−") + Math.abs((r - 1) * 100).toFixed(0) + "%" : ""; }
+function hlWord(s, w) { return esc(s).replace(new RegExp("(" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")", "ig"), `<span class="mark-w">$1</span>`); }
+function gchips(gs) {
+  return `<div class="gchips">${gs.map(g => `<span class="gchip" data-open="${g.id}">${esc(g.name)} ${g.ratio ? `<b style="color:${g.ratio >= 1 ? css("--up-text") : css("--down-text")}">${ratioTxt(g.ratio)}</b>` : ""}</span>`).join("")}</div>`;
+}
+async function loadTrends() {
+  const t = await api("/api/trends?days=" + trendDays);
+  $("#trendNote").textContent = t.relaxed ? "Мало растущих игр — порог роста снижен до +5%." : `Растущих игр в выборке: ${t.growing.length}`;
+  $("#updWords").innerHTML = t.update_words.length ? t.update_words.slice(0, 40).map(w => `
+    <div class="word"><span class="w" data-word="${esc(w.word)}">${esc(w.word)}</span>
+      <span class="meta">добавили ${w.games_count} ${plural(w.games_count, "игра", "игры", "игр")} ${w.in_names ? ` · в названии у ${w.in_names}` : ""} · последний раз ${ago(w.last)}</span>
+      ${w.games[0]?.snippet ? `<div class="snip">${hlWord(w.games[0].snippet, w.word)}</div>` : ""}
+      ${gchips(w.games)}</div>`).join("") : `<p class="hint">За период изменений текста не найдено. Они появятся, когда трекер поработает хотя бы пару дней.</p>`;
+  const maxLift = Math.max(1, ...t.words.map(w => w.lift));
+  $("#growWords").innerHTML = t.words.length ? t.words.slice(0, 40).map(w => `
+    <div class="word"><span class="w" data-word="${esc(w.word)}">${esc(w.word)}</span>
+      <span class="meta">у ${w.growing_games} растущих из ${w.all_games} всего · в ${w.lift.toFixed(1)}× чаще${w.in_names ? ` · в названиях: ${w.in_names}` : ""}</span>
+      <div class="bar" style="width:${(w.lift / maxLift * 100).toFixed(0)}%;margin-top:4px" title="Насколько чаще слово встречается у растущих игр"></div>
+      ${gchips(w.games)}</div>`).join("") : `<p class="hint">Пока недостаточно данных о росте. Нужна история хотя бы за 2–7 дней.</p>`;
+}
+function plural(n, a, b, c) { n = Math.abs(n) % 100; const n1 = n % 10; return n > 10 && n < 20 ? c : n1 > 1 && n1 < 5 ? b : n1 === 1 ? a : c; }
+
+// ---------- feed ----------
+let FEED = [];
+async function loadFeed() { FEED = await api("/api/updates?days=28"); renderFeed(); }
+function renderFeed() {
+  const q = $("#feedSearch").value.trim().toLowerCase();
+  const rows = FEED.filter(u => !q || [u.game_name, u.new_name, u.new_description].join(" ").toLowerCase().includes(q));
+  $("#feed").innerHTML = rows.length ? rows.slice(0, 150).map(u => updateHtml(u, {game: 1})).join("") : `<div class="card empty">Изменений названий/описаний за 28 дней пока нет.</div>`;
+}
+
+// ---------- global ----------
+document.addEventListener("click", e => {
+  const o = e.target.closest("[data-open]");
+  if (o) { e.preventDefault(); openGame(+o.dataset.open); return; }
+  const w = e.target.closest("[data-word]");
+  if (w) { $("#search").value = w.dataset.word; filter = "all"; syncFilters(); showTab("games"); renderTable(); }
+});
+function showTab(name) {
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
+  ["games", "trends", "feed"].forEach(n => $("#tab-" + n).hidden = n !== name);
+  if (name === "trends") loadTrends();
+  if (name === "feed") loadFeed();
+}
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => showTab(t.dataset.tab));
+function syncFilters() { document.querySelectorAll("#filters .chip").forEach(c => c.classList.toggle("active", c.dataset.f === filter)); }
+document.querySelectorAll("#filters .chip").forEach(c => c.onclick = () => { filter = c.dataset.f; syncFilters(); renderTable(); });
+$("#search").oninput = renderTable;
+$("#minOnline").onchange = renderTable;
+$("#feedSearch").oninput = renderFeed;
+document.querySelectorAll("#trendDays .chip").forEach(c => c.onclick = () => {
+  trendDays = +c.dataset.d; document.querySelectorAll("#trendDays .chip").forEach(x => x.classList.toggle("active", x === c)); loadTrends();
+});
+
+$("#btnManual").onclick = () => { $("#manualPop").classList.toggle("open"); renderManual(); };
+function renderManual() {
+  $("#manualList").innerHTML = (STATUS.manual_games || []).map(m => `<div><span>${esc(m)}</span><a href="#" data-rm="${esc(m)}">убрать</a></div>`).join("") || `<span class="hint">Пусто</span>`;
+  document.querySelectorAll("[data-rm]").forEach(a => a.onclick = async e => {
+    e.preventDefault(); const r = await api("/api/manual/remove", {method: "POST", body: JSON.stringify({entry: a.dataset.rm})});
+    STATUS.manual_games = r.manual_games; renderManual();
+  });
+}
+$("#manualAdd").onclick = async () => {
+  const v = $("#manualInput").value.trim(); if (!v) return;
+  const r = await api("/api/manual/add", {method: "POST", body: JSON.stringify({entry: v})});
+  if (!r.ok) return alert(r.message);
+  STATUS.manual_games = r.manual_games; $("#manualInput").value = ""; renderManual();
+};
+
+$("#btnCollect").onclick = async () => {
+  const r = await api("/api/collect", {method: "POST"});
+  if (!r.ok) return alert(r.message);
+  pollStatus();
+};
+
+let pollTimer;
+async function pollStatus() {
+  await loadStatus();
+  clearTimeout(pollTimer);
+  if (STATUS.collecting) pollTimer = setTimeout(pollStatus, 3000);
+  else { await loadGames(); }
+}
+
+async function loadStatus() {
+  STATUS = await api("/api/status");
+  if (STATUS.static) { $("#btnCollect").hidden = true; $("#btnManual").hidden = true; }
+  const b = $("#btnCollect");
+  b.disabled = STATUS.collecting || STATUS.demo;
+  b.textContent = STATUS.collecting ? `Собираю… ${STATUS.progress || ""}` : "Собрать сейчас";
+  $("#sub").textContent = STATUS.demo ? "демо" : "";
+  const hist = STATUS.first ? ((STATUS.now - STATUS.first) / 86400).toFixed(1) : 0;
+  $("#stat").textContent = STATUS.now ? `игр: ${STATUS.games} · замер: ${ago(STATUS.now)} · история: ${hist} дн. · изменений текста: ${STATUS.updates}` : "";
+  let html = "";
+  if (STATUS.static && STATUS.now) html += `<div class="banner info">Данные обновляются автоматически раз в час. Последний замер: ${ago(STATUS.now)}.</div>`;
+  if (STATUS.static && !STATUS.now) html += `<div class="banner info">Первый сбор ещё не прошёл — данные появятся в течение часа.</div>`;
+  if (STATUS.demo) html += `<div class="banner info">Демо-режим: вымышленные игры и сгенерированная история. Для реальных данных запустите <code>python run.py</code>.</div>`;
+  const last = (STATUS.runs || [])[0];
+  if (last && !last.ok && last.finished && !STATUS.demo) html += `<div class="banner warn"><b>Последний сбор не удался.</b> ${esc(last.message)}</div>`;
+  if (!STATUS.demo && STATUS.now && hist < 7) html += `<div class="banner info">История пока ${hist} дн. Рост за 7/14/28 дней появится, когда трекер проработает столько же (пока там «—»).</div>`;
+  if (STATUS.public_url) html += `<div class="banner info" style="display:flex;gap:14px;align-items:center;flex-wrap:wrap"><div id="qr" style="background:#fff;padding:6px;border-radius:8px;line-height:0"></div><div><b>Открыть с телефона из любого места:</b><br><a href="${esc(STATUS.public_url)}" target="_blank">${esc(STATUS.public_url)}</a><br><span class="stat">Отсканируйте QR, войдите паролем из окна трекера (или из config.json), затем «На экран Домой». Ссылка меняется при перезапуске трекера.</span></div></div>`;
+  $("#banners").innerHTML = html;
+  if (STATUS.public_url && window.QRCode) new QRCode($("#qr"), {text: STATUS.public_url, width: 112, height: 112});
+}
+
+async function loadGames() { GAMES = await api("/api/games"); renderTable(); }
+
+(async () => {
+  await loadStatus();
+  await loadGames();
+  if (STATUS.collecting) pollStatus();
+  setInterval(async () => { const was = STATUS.now; await loadStatus(); if (STATUS.now !== was) loadGames(); }, 60000);
+})();
+</script>
+</body>
+</html>

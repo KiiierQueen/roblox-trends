@@ -1,0 +1,3 @@
+# Ваши игры для отслеживания: по одной ссылке, placeId или u:<universeId> в строке.
+# Пример:
+# https://www.roblox.com/games/920587237/Adopt-Me
